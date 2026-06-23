@@ -14,16 +14,38 @@ def split_image_counts(data) -> dict[str, list[int]]:
     return counts
 
 
-def plot_split_distributions(data, order=("train", "val", "test")):
+def split_instance_counts(data) -> dict[str, list[int]]:
+    counts = {}
+    for split, idxs in data.split_idx.items():
+        per_class = [0] * data.num_classes
+        for i in idxs:
+            for c in data.samples[i].labels:
+                per_class[int(c)] += 1
+        counts[split] = per_class
+    return counts
+
+
+def plot_split_distributions(data, order=("train", "val", "test"),
+                             metric="images"):
     from plotly.subplots import make_subplots
     import plotly.graph_objects as go
 
-    counts = split_image_counts(data)
+    if metric == "images":
+        counts = split_image_counts(data)
+        y_title, noun = "number of images", "image counts"
+        n_of = lambda s: (len(data.split_idx[s]), "imgs")
+    elif metric == "instances":
+        counts = split_instance_counts(data)
+        y_title, noun = "number of instances", "instance counts"
+        n_of = lambda s: (sum(counts[s]), "boxes")
+    else:
+        raise ValueError("metric must be 'images' or 'instances'")
+
     colors = {"train": "#4C78A8", "val": "#F58518", "test": "#54A24B"}
 
     fig = make_subplots(
         rows=1, cols=len(order),
-        subplot_titles=[f"{s.upper()}  (n={len(data.split_idx[s])} imgs)"
+        subplot_titles=[f"{s.upper()}  (n={n_of(s)[0]} {n_of(s)[1]})"
                         for s in order],
         shared_yaxes=True, horizontal_spacing=0.04,
     )
@@ -38,9 +60,9 @@ def plot_split_distributions(data, order=("train", "val", "test")):
         )
         fig.update_xaxes(tickangle=-40, row=1, col=col)
 
-    fig.update_yaxes(title_text="number of images", row=1, col=1)
+    fig.update_yaxes(title_text=y_title, row=1, col=1)
     fig.update_layout(
-        title_text="Indoor Object Detection — per-class image counts by split "
+        title_text=f"Indoor Object Detection — per-class {noun} by split "
                     "(80 / 10 / 10)",
         height=480, width=1150, bargap=0.25,
         template="plotly_white", margin=dict(t=90, b=120),
