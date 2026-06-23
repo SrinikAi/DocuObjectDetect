@@ -115,3 +115,48 @@ def plot_class_examples(data, split="train", cols=4, seed=0, figsize=None):
                  fontsize=13)
     fig.tight_layout()
     return fig
+
+
+def plot_training_curves(csv_path):
+    import pandas as pd
+    from plotly.subplots import make_subplots
+    import plotly.graph_objects as go
+
+    df = pd.read_csv(csv_path)
+    df.columns = df.columns.str.strip()
+    x = df["epoch"]
+
+    fig = make_subplots(
+        rows=2, cols=3,
+        subplot_titles=("Box loss", "Cls loss", "DFL loss",
+                        "Precision / Recall", "mAP", "Learning rate"),
+        horizontal_spacing=0.07, vertical_spacing=0.14,
+    )
+
+    def line(col, name, row, c, color, dash=None):
+        if col in df.columns:
+            fig.add_trace(
+                go.Scatter(x=x, y=df[col], name=name, mode="lines",
+                           line=dict(color=color, dash=dash)),
+                row=row, col=c)
+
+    tr, va = "#4C78A8", "#F58518"
+    line("train/box_loss", "box train", 1, 1, tr)
+    line("val/box_loss", "box val", 1, 1, va, dash="dash")
+    line("train/cls_loss", "cls train", 1, 2, tr)
+    line("val/cls_loss", "cls val", 1, 2, va, dash="dash")
+    line("train/dfl_loss", "dfl train", 1, 3, tr)
+    line("val/dfl_loss", "dfl val", 1, 3, va, dash="dash")
+    line("metrics/precision(B)", "precision", 2, 1, "#54A24B")
+    line("metrics/recall(B)", "recall", 2, 1, "#E45756")
+    line("metrics/mAP50(B)", "mAP50", 2, 2, "#4C78A8")
+    line("metrics/mAP50-95(B)", "mAP50-95", 2, 2, "#B279A2")
+    line("lr/pg0", "lr", 2, 3, "#79706E")
+
+    fig.update_xaxes(title_text="epoch")
+    fig.update_layout(
+        title_text="YOLO training curves",
+        height=700, width=1150, template="plotly_white",
+        margin=dict(t=80), legend=dict(orientation="h", y=-0.08),
+    )
+    return fig
