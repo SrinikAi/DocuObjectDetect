@@ -117,6 +117,42 @@ def plot_class_examples(data, split="train", cols=4, seed=0, figsize=None):
     return fig
 
 
+def plot_ap_vs_instances(data, class_ap, split="train"):
+    from plotly.subplots import make_subplots
+    import plotly.graph_objects as go
+
+    inst = split_instance_counts(data)[split]
+    order = sorted(range(data.num_classes), key=lambda c: inst[c], reverse=True)
+    classes = [data.classes[c] for c in order]
+    counts = [inst[c] for c in order]
+    aps = [class_ap.get(data.classes[c], 0.0) for c in order]
+
+    fig = make_subplots(
+        rows=1, cols=2, horizontal_spacing=0.09,
+        subplot_titles=(f"{split} instances per class (frequency)",
+                        "val AP@0.5 per class"),
+    )
+    fig.add_trace(
+        go.Bar(x=classes, y=counts, marker_color="#4C78A8",
+               text=counts, textposition="outside", showlegend=False),
+        row=1, col=1)
+    fig.add_trace(
+        go.Bar(x=classes, y=aps, marker_color="#E45756",
+               text=[f"{a:.2f}" for a in aps], textposition="outside",
+               showlegend=False),
+        row=1, col=2)
+    fig.update_xaxes(tickangle=-40)
+    fig.update_yaxes(title_text="instances", row=1, col=1)
+    fig.update_yaxes(title_text="AP@0.5", range=[0, 1.05], row=1, col=2)
+    fig.update_layout(
+        title_text="Does class imbalance hurt? — train frequency vs val AP "
+                    "(classes sorted most→least frequent)",
+        height=470, width=1150, bargap=0.25,
+        template="plotly_white", margin=dict(t=90, b=120),
+    )
+    return fig
+
+
 def plot_training_curves(csv_path):
     import pandas as pd
     from plotly.subplots import make_subplots
