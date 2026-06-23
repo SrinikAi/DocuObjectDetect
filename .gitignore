@@ -1,0 +1,13 @@
+# data / artifacts (never commit the 411MB dataset or caches)
+indoor_od/
+dataset/
+*.zip
+*.npy
+split_*.json
+# python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+# runs / weights
+runs/
+*.pt
