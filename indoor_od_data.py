@@ -14,8 +14,8 @@ from PIL import Image
 from torch.utils.data import Dataset
 
 ZENODO_URL = (
-    "https://zenodo.org/records/2654485/files/"
-    "Indoor%20Object%20Detection%20Dataset.zip?download=1"
+    "https://zenodo.org/api/records/2654485/files/"
+    "Indoor%20Object%20Detection%20Dataset.zip/content"
 )
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".JPG", ".JPEG", ".PNG"}
 
@@ -84,7 +84,7 @@ class IndoorODData:
     @staticmethod
     def _http_download(url: str, dst: Path):
         import urllib.request
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "python-urllib"})
         with urllib.request.urlopen(req) as r, open(dst, "wb") as f:
             total = int(r.headers.get("Content-Length", 0))
             done = 0
