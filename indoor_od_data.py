@@ -206,17 +206,16 @@ class IndoorODData:
 
         try:
             from skmultilearn.model_selection import IterativeStratification
+            np.random.seed(self.seed)
             strat1 = IterativeStratification(
                 n_splits=2, order=2,
-                sample_distribution_per_fold=[self.ratios[0], 1 - self.ratios[0]],
-                random_state=self.seed)
+                sample_distribution_per_fold=[self.ratios[0], 1 - self.ratios[0]])
             train_i, rest_i = next(strat1.split(idx.reshape(-1, 1), Y))
             rest = idx[rest_i]
             val_frac = self.ratios[1] / (self.ratios[1] + self.ratios[2])
             strat2 = IterativeStratification(
                 n_splits=2, order=2,
-                sample_distribution_per_fold=[val_frac, 1 - val_frac],
-                random_state=self.seed)
+                sample_distribution_per_fold=[val_frac, 1 - val_frac])
             v_i, t_i = next(strat2.split(rest.reshape(-1, 1), Y[rest]))
             split = {
                 "train": idx[train_i].tolist(),
