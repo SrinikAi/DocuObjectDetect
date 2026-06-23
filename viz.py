@@ -46,3 +46,50 @@ def plot_split_distributions(data, order=("train", "val", "test")):
         template="plotly_white", margin=dict(t=90, b=120),
     )
     return fig
+
+
+def plot_class_examples(data, split="train", cols=4, seed=0, figsize=None):
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as patches
+
+    rng = np.random.default_rng(seed)
+    idxs = data.split_idx[split]
+
+    chosen = {}
+    for c in range(data.num_classes):
+        members = [i for i in idxs if c in data.samples[i].labels]
+        if members:
+            chosen[c] = int(rng.choice(members))
+
+    cmap = plt.get_cmap("tab10")
+    colors = [cmap(i % 10) for i in range(data.num_classes)]
+
+    items = sorted(chosen.items())
+    n = len(items)
+    cols = min(cols, n) if n else 1
+    rows = (n + cols - 1) // cols
+    if figsize is None:
+        figsize = (cols * 4, rows * 3.4)
+
+    fig, axes = plt.subplots(rows, cols, figsize=figsize, squeeze=False)
+    axes = axes.ravel()
+    for ax in axes:
+        ax.axis("off")
+
+    for ax, (c, gidx) in zip(axes, items):
+        s = data.samples[gidx]
+        ax.imshow(data.get_image(gidx))
+        ax.set_title(f"{data.classes[c]}  (img {gidx})", fontsize=11)
+        for (x1, y1, x2, y2), lab in zip(s.boxes, s.labels):
+            col = colors[int(lab)]
+            ax.add_patch(patches.Rectangle(
+                (x1, y1), x2 - x1, y2 - y1,
+                fill=False, edgecolor=col, linewidth=2))
+            ax.text(x1, max(0, y1 - 3), data.classes[int(lab)],
+                    fontsize=8, color="white",
+                    bbox=dict(facecolor=col, edgecolor="none", pad=1))
+
+    fig.suptitle(f"{split} — one example image per class (all boxes drawn)",
+                 fontsize=13)
+    fig.tight_layout()
+    return fig
