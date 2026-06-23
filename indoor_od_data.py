@@ -54,7 +54,7 @@ class IndoorODData:
 
         self.classes: list[str] = []
         self.class_to_idx: dict[str, int] = {}
-        self.samples: list[Sample] = self._parse_voc()
+        self.samples: list[Sample] = self._parse_annotations()
         if not self.samples:
             raise RuntimeError(f"No annotations parsed under {self.data_dir}")
 
@@ -108,49 +108,53 @@ class IndoorODData:
                 stem_to_path.setdefault(p.stem, str(p))
         return stem_to_path
 
-    def _parse_voc(self) -> list[Sample]:
+    def _parse_annotations(self) -> list[Sample]:
         stem_to_path = self._index_images()
-        xml_files = [p for p in self.data_dir.rglob("*.xml")]
+        xml_files = sorted(self.data_dir.rglob("*.xml"))
         raw: list[tuple] = []
         class_set: set[str] = set()
+        missing = 0
 
-        for xml in sorted(xml_files):
+        for xml in xml_files:
             try:
                 tree = ET.parse(xml)
             except ET.ParseError:
                 continue
-            r = tree.getroot()
+            root = tree.getroot()
 
-            fname = r.findtext("filename") or ""
-            stem = Path(fname).stem or xml.stem
-            img_path = stem_to_path.get(stem) or stem_to_path.get(xml.stem)
-            if img_path is None:
-                continue
+            for img_el in root.iter("image"):
+                stem = Path(img_el.get("file") or "").stem
+                img_path = stem_to_path.get(stem)
+                if img_path is None:
+                    missing += 1
+                    continue
 
-            size = r.find("size")
-            w = int(float(size.findtext("width"))) if size is not None else 0
-            h = int(float(size.findtext("height"))) if size is not None else 0
-            if w <= 0 or h <= 0:
                 with Image.open(img_path) as im:
                     w, h = im.size
 
-            boxes, names = [], []
-            for obj in r.findall("object"):
-                name = (obj.findtext("name") or "").strip()
-                bb = obj.find("bndbox")
-                if not name or bb is None:
-                    continue
-                x1 = float(bb.findtext("xmin")); y1 = float(bb.findtext("ymin"))
-                x2 = float(bb.findtext("xmax")); y2 = float(bb.findtext("ymax"))
-                x1, x2 = sorted((x1, x2)); y1, y2 = sorted((y1, y2))
-                x1 = max(0, min(x1, w)); x2 = max(0, min(x2, w))
-                y1 = max(0, min(y1, h)); y2 = max(0, min(y2, h))
-                if x2 - x1 < 1 or y2 - y1 < 1:
-                    continue
-                boxes.append([x1, y1, x2, y2]); names.append(name)
-                class_set.add(name)
-            if boxes:
-                raw.append((img_path, w, h, boxes, names))
+                boxes, names = [], []
+                for b in img_el.findall("box"):
+                    name = (b.findtext("label") or "").strip()
+                    try:
+                        left = float(b.get("left")); top = float(b.get("top"))
+                        bw = float(b.get("width")); bh = float(b.get("height"))
+                    except (TypeError, ValueError):
+                        continue
+                    if not name:
+                        continue
+                    x1, y1 = left, top
+                    x2, y2 = left + bw, top + bh
+                    x1 = max(0.0, min(x1, w)); x2 = max(0.0, min(x2, w))
+                    y1 = max(0.0, min(y1, h)); y2 = max(0.0, min(y2, h))
+                    if x2 - x1 < 1 or y2 - y1 < 1:
+                        continue
+                    boxes.append([x1, y1, x2, y2]); names.append(name)
+                    class_set.add(name)
+                if boxes:
+                    raw.append((img_path, w, h, boxes, names))
+
+        if missing:
+            print(f"  ({missing} annotated frames had no matching image file)")
 
         self.classes = sorted(class_set)
         self.class_to_idx = {c: i for i, c in enumerate(self.classes)}
