@@ -1,32 +1,3 @@
-"""
-Indoor Object Detection Dataset - data layer.
-
-Single source of truth for the Zenodo "Indoor Object Detection Dataset"
-(record 2654485, ~2213 images, 7 classes, PASCAL VOC XML annotations).
-
-Responsibilities:
-  1. Download + extract the dataset once (cached on disk).
-  2. Parse every VOC XML into a flat in-memory index (one record per image).
-  3. Split 80/10/10 with multi-label iterative stratification + a repair pass
-     that GUARANTEES every class appears in train/val/test. The split is
-     persisted to disk (keyed by seed+ratios) so it is reproducible and instant
-     to reload.
-  4. Expose each split as a pure torch Dataset returning (image, target) in
-     torchvision detection format, with decoded pixels RAM-cached as uint8.
-
-Usage (Colab):
-    !pip -q install scikit-multilearn torch torchvision
-    from indoor_od_data import IndoorODData
-    data = IndoorODData(root="/content/indoor_od")
-    data.summary()                       # per-class counts per split
-    train_ds = data.train               # torch Dataset
-    val_ds   = data.val
-    test_ds  = data.test
-    from torch.utils.data import DataLoader
-    dl = DataLoader(train_ds, batch_size=4, shuffle=True,
-                    collate_fn=IndoorODData.collate_fn)
-"""
-
 from __future__ import annotations
 
 import json
@@ -51,12 +22,11 @@ IMG_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".JPG", ".JPEG", ".PNG"}
 
 @dataclass
 class Sample:
-    """One image and its annotations. Labels are internal 0-indexed class ids."""
     image_path: str
     width: int
     height: int
-    boxes: np.ndarray   # (N, 4) float32, xyxy in pixels
-    labels: np.ndarray  # (N,)  int64, internal class ids [0 .. num_classes-1]
+    boxes: np.ndarray
+    labels: np.ndarray
 
 
 class IndoorODData:
@@ -65,8 +35,8 @@ class IndoorODData:
         root: str = "indoor_od",
         ratios: tuple[float, float, float] = (0.8, 0.1, 0.1),
         seed: int = 42,
-        cache_images: str = "ram",   # "ram" | "none"
-        label_offset: int = 1,        # torchvision reserves 0 for background
+        cache_images: str = "ram",
+        label_offset: int = 1,
         download: bool = True,
     ):
         assert abs(sum(ratios) - 1.0) < 1e-6, "ratios must sum to 1"
@@ -82,25 +52,20 @@ class IndoorODData:
         if download:
             self._download_and_extract()
 
-        # ----- parse once -> index -----
         self.classes: list[str] = []
         self.class_to_idx: dict[str, int] = {}
         self.samples: list[Sample] = self._parse_voc()
         if not self.samples:
             raise RuntimeError(f"No annotations parsed under {self.data_dir}")
 
-        # ----- split once (persisted) -----
         self.split_idx: dict[str, list[int]] = self._make_or_load_split()
 
-        # ----- shared RAM image cache (uint8 HWC), keyed by global sample index -----
         self._img_cache: dict[int, np.ndarray] = {}
 
-        # ----- build the three Dataset views -----
         self.train = _SplitDataset(self, self.split_idx["train"])
         self.val = _SplitDataset(self, self.split_idx["val"])
         self.test = _SplitDataset(self, self.split_idx["test"])
 
-    # ------------------------------------------------------------------ download
     def _download_and_extract(self):
         marker = self.data_dir / ".extracted"
         if marker.exists():
@@ -136,9 +101,7 @@ class IndoorODData:
                           end="", flush=True)
         print()
 
-    # ------------------------------------------------------------------- parsing
     def _index_images(self) -> dict[str, str]:
-        """Map image-stem -> absolute path for every image under data_dir."""
         stem_to_path: dict[str, str] = {}
         for p in self.data_dir.rglob("*"):
             if p.suffix in IMG_EXTS and p.is_file():
@@ -148,7 +111,7 @@ class IndoorODData:
     def _parse_voc(self) -> list[Sample]:
         stem_to_path = self._index_images()
         xml_files = [p for p in self.data_dir.rglob("*.xml")]
-        raw: list[tuple] = []   # (img_path, w, h, boxes_list, names_list)
+        raw: list[tuple] = []
         class_set: set[str] = set()
 
         for xml in sorted(xml_files):
@@ -158,7 +121,6 @@ class IndoorODData:
                 continue
             r = tree.getroot()
 
-            # resolve image: prefer <filename>/<path>, fall back to xml stem
             fname = r.findtext("filename") or ""
             stem = Path(fname).stem or xml.stem
             img_path = stem_to_path.get(stem) or stem_to_path.get(xml.stem)
@@ -190,7 +152,6 @@ class IndoorODData:
             if boxes:
                 raw.append((img_path, w, h, boxes, names))
 
-        # stable, sorted class vocabulary derived from the data
         self.classes = sorted(class_set)
         self.class_to_idx = {c: i for i, c in enumerate(self.classes)}
         print(f"Parsed {len(raw)} annotated images, "
@@ -206,13 +167,11 @@ class IndoorODData:
             ))
         return samples
 
-    # --------------------------------------------------------------------- split
     @property
     def num_classes(self) -> int:
         return len(self.classes)
 
     def _label_matrix(self) -> np.ndarray:
-        """Binary (n_samples, n_classes) presence matrix for stratification."""
         Y = np.zeros((len(self.samples), self.num_classes), dtype=np.int8)
         for i, s in enumerate(self.samples):
             Y[i, np.unique(s.labels)] = 1
@@ -227,7 +186,6 @@ class IndoorODData:
         cache = self._split_cache_path()
         if cache.exists():
             split = json.loads(cache.read_text())
-            # guard against a stale cache from a different parse
             if sum(len(v) for v in split.values()) == len(self.samples):
                 print(f"Loaded split from {cache.name}")
                 return split
@@ -244,13 +202,11 @@ class IndoorODData:
 
         try:
             from skmultilearn.model_selection import IterativeStratification
-            # 80 / 20
             strat1 = IterativeStratification(
                 n_splits=2, order=2,
                 sample_distribution_per_fold=[self.ratios[0], 1 - self.ratios[0]],
                 random_state=self.seed)
             train_i, rest_i = next(strat1.split(idx.reshape(-1, 1), Y))
-            # split the 20% into val/test (half/half by default)
             rest = idx[rest_i]
             val_frac = self.ratios[1] / (self.ratios[1] + self.ratios[2])
             strat2 = IterativeStratification(
@@ -273,8 +229,8 @@ class IndoorODData:
 
     def _greedy_split(self, Y: np.ndarray) -> dict[str, list[int]]:
         rng = np.random.default_rng(self.seed)
-        assigned = -np.ones(Y.shape[0], dtype=int)  # 0=train,1=val,2=test
-        order = np.argsort(Y.sum(axis=0))            # rarest class first
+        assigned = -np.ones(Y.shape[0], dtype=int)
+        order = np.argsort(Y.sum(axis=0))
         for c in order:
             members = np.where((Y[:, c] == 1) & (assigned < 0))[0]
             rng.shuffle(members)
@@ -294,7 +250,6 @@ class IndoorODData:
         }
 
     def _repair_split(self, split: dict[str, list[int]], Y: np.ndarray):
-        """Guarantee every class is present in val and test (pull from train)."""
         sets = {k: set(v) for k, v in split.items()}
         for target in ("val", "test"):
             for c in range(self.num_classes):
@@ -302,7 +257,7 @@ class IndoorODData:
                 if present:
                     continue
                 donors = [i for i in sets["train"] if Y[i, c] == 1]
-                if not donors:  # fall back to the other small split
+                if not donors:
                     other = "test" if target == "val" else "val"
                     donors = [i for i in sets[other] if Y[i, c] == 1]
                     src = other
@@ -317,9 +272,7 @@ class IndoorODData:
         for k in split:
             split[k] = sorted(sets[k])
 
-    # ----------------------------------------------------------------- utilities
     def get_image(self, gidx: int) -> np.ndarray:
-        """Decoded uint8 HWC image for global sample index, RAM-cached."""
         if self.cache_images == "ram" and gidx in self._img_cache:
             return self._img_cache[gidx]
         with Image.open(self.samples[gidx].image_path) as im:
@@ -356,8 +309,6 @@ class IndoorODData:
 
 
 class _SplitDataset(Dataset):
-    """A single split as a torchvision-style detection Dataset."""
-
     def __init__(self, parent: IndoorODData, indices: list[int],
                  transforms: Optional[Callable] = None):
         self.parent = parent
@@ -374,7 +325,7 @@ class _SplitDataset(Dataset):
     def __getitem__(self, i):
         gidx = self.indices[i]
         s = self.parent.samples[gidx]
-        arr = self.parent.get_image(gidx)                       # uint8 HWC
+        arr = self.parent.get_image(gidx)
         img = torch.from_numpy(arr).permute(2, 0, 1).float() / 255.0
         target = {
             "boxes": torch.as_tensor(s.boxes, dtype=torch.float32),

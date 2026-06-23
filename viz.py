@@ -1,18 +1,9 @@
-"""
-Visualization helpers for the Indoor Object Detection task.
-
-Kept separate from the data layer so the Colab stays clean:
-    from viz import plot_split_distributions
-    plot_split_distributions(data).show()
-"""
-
 from __future__ import annotations
 
 import numpy as np
 
 
 def split_image_counts(data) -> dict[str, list[int]]:
-    """Number of IMAGES per class in each split (image counted once per class)."""
     counts = {}
     for split, idxs in data.split_idx.items():
         per_class = [0] * data.num_classes
@@ -24,10 +15,6 @@ def split_image_counts(data) -> dict[str, list[int]]:
 
 
 def plot_split_distributions(data, order=("train", "val", "test")):
-    """Three side-by-side plotly bar charts (train/val/test):
-    x = class names, y = number of images containing that class.
-    Returns a plotly Figure (call .show() to render in a Colab cell).
-    """
     from plotly.subplots import make_subplots
     import plotly.graph_objects as go
 
