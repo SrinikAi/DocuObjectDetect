@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 
 def split_image_counts(data) -> dict[str, list[int]]:
@@ -27,9 +32,6 @@ def split_instance_counts(data) -> dict[str, list[int]]:
 
 def plot_split_distributions(data, order=("train", "val", "test"),
                              metric="images"):
-    from plotly.subplots import make_subplots
-    import plotly.graph_objects as go
-
     if metric == "images":
         counts = split_image_counts(data)
         y_title, noun = "number of images", "image counts"
@@ -71,9 +73,6 @@ def plot_split_distributions(data, order=("train", "val", "test"),
 
 
 def plot_class_examples(data, split="train", cols=4, seed=0, figsize=None):
-    import matplotlib.pyplot as plt
-    import matplotlib.patches as patches
-
     rng = np.random.default_rng(seed)
     idxs = data.split_idx[split]
 
@@ -118,9 +117,6 @@ def plot_class_examples(data, split="train", cols=4, seed=0, figsize=None):
 
 
 def plot_ap_vs_instances(data, class_ap, split="train"):
-    from plotly.subplots import make_subplots
-    import plotly.graph_objects as go
-
     inst = split_instance_counts(data)[split]
     order = sorted(range(data.num_classes), key=lambda c: inst[c], reverse=True)
     classes = [data.classes[c] for c in order]
@@ -154,10 +150,6 @@ def plot_ap_vs_instances(data, class_ap, split="train"):
 
 
 def plot_training_curves(csv_path):
-    import pandas as pd
-    from plotly.subplots import make_subplots
-    import plotly.graph_objects as go
-
     df = pd.read_csv(csv_path)
     df.columns = df.columns.str.strip()
     x = df["epoch"]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import dataclass, field
@@ -12,6 +13,11 @@ import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
+
+try:
+    from skmultilearn.model_selection import IterativeStratification
+except ImportError:
+    IterativeStratification = None
 
 ZENODO_URL = (
     "https://zenodo.org/api/records/2654485/files/"
@@ -83,7 +89,6 @@ class IndoorODData:
 
     @staticmethod
     def _http_download(url: str, dst: Path):
-        import urllib.request
         req = urllib.request.Request(url, headers={"User-Agent": "python-urllib"})
         with urllib.request.urlopen(req) as r, open(dst, "wb") as f:
             total = int(r.headers.get("Content-Length", 0))
@@ -204,8 +209,7 @@ class IndoorODData:
         n = Y.shape[0]
         idx = np.arange(n)
 
-        try:
-            from skmultilearn.model_selection import IterativeStratification
+        if IterativeStratification is not None:
             np.random.seed(self.seed)
             strat1 = IterativeStratification(
                 n_splits=2, order=2,
@@ -223,7 +227,7 @@ class IndoorODData:
                 "test": rest[t_i].tolist(),
             }
             print("Split via iterative stratification.")
-        except ImportError:
+        else:
             print("scikit-multilearn not found -> greedy rarest-first split.")
             split = self._greedy_split(Y)
 
