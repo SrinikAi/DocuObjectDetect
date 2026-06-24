@@ -82,7 +82,7 @@ def plot_predictions(data, model, gidxs, conf=0.25, cols=4, title=""):
     for ax in axes:
         ax.axis("off")
 
-    gt_c, pr_c = "#2CA02C", "#D62728"
+    gt_c, pr_c = "#2CA02C", "#1F77B4"
     for ax, gidx in zip(axes, gidxs):
         s = data.samples[gidx]
         ax.imshow(data.get_image(gidx))
@@ -115,7 +115,7 @@ def plot_good_bad(data, model, split="val", k=4, conf=0.25):
     best = [g for g, _ in ranked[-k:]][::-1]
     fig_bad = plot_predictions(
         data, model, worst, conf,
-        title=f"Worst {k} {split} images (lowest GT-vs-pred IoU)")
+        title=f"Bad {k} {split} images (lowest GT-vs-pred IoU)")
     fig_good = plot_predictions(
         data, model, best, conf,
         title=f"Best {k} {split} images (highest GT-vs-pred IoU)")
